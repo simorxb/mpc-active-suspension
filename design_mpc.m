@@ -31,8 +31,8 @@ qcar.OutputName = ["xb";"sd";"ab"];
 qcar = setmpcsignals(qcar, 'UD', 1, 'MV', 2);
 
 %% Sample time and horizons
-Ts = 0.025;     % sampling time (s) - fast enough for the wheel-hop mode
-p  = 20;        % prediction horizon (~0.5 s look-ahead)
+Ts = 0.01;     % sampling time (s) - fast enough for the wheel-hop mode
+p  = 40;        % prediction horizon (~0.5 s look-ahead)
 m  = 10;         % control horizon
 
 %% Manipulated variable: fs is scaled by 1e3 in B, so 1 unit of fs = 1000 N
@@ -47,7 +47,7 @@ OV(3) = struct('Min', -Inf, 'Max', Inf, 'ScaleFactor', 1);    % ab [m/s^2]
 Weights = struct( ...
     'MV',     0, ...
     'MVRate', 0.1, ...
-    'OV',     [0 1 1]);
+    'OV',     [0 1 5]);
 
 %% Build the controller
 mpcobj = mpc(qcar, Ts, p, m, Weights, MV, OV);
@@ -58,9 +58,11 @@ steps = round(Tsim/Ts);                          % simulation iterations
 
 ref      = zeros(steps, 3);                      % we want xb = 0, sd = 0 and ab = 0
 
-% road profile
+% road profile: smooth half-cosine bump (1 - cos) of amplitude 0.05 m
 r_signal = zeros(steps, 1);
-r_signal(1:round(0.25/Ts)) = 0.025*(1-cos(8*pi*t(1:round(0.25/Ts))));
+N_bump   = round(0.25/Ts);
+t_bump   = (0:N_bump-1)'*Ts;
+r_signal(1:N_bump) = 0.025*(1-cos(8*pi*t_bump));
 
 simopt = mpcsimopt(mpcobj);
 simopt.UnmeasuredDisturbance = r_signal;
@@ -68,24 +70,34 @@ simopt.UnmeasuredDisturbance = r_signal;
 [y, t, u, xp] = sim(mpcobj, steps, ref, simopt);
 fs_actual = xp(:,5);                             % filtered (applied) force
 
+%% Open loop (passive suspension, fs = 0)
+% Same disturbance into the augmented plant with the actuator off.
+u_ol      = [r_signal, zeros(steps,1)];
+[y_ol, t_ol, x_ol] = lsim(qcar, u_ol, (0:steps-1)'*Ts);
+
 %% Plot (black background, 2x2 layout)
 figure;
 
 % Top-left: Body travel and road profile
 ax1 = subplot(2,2,1);
-plot(t, xp(:,1), 'b-',  'LineWidth', 2);
+plot(t_ol, y_ol(:,1), 'b-', 'LineWidth', 2);
 hold on;
+plot(t, xp(:,1), 'r-',  'LineWidth', 2);
 plot(t, r_signal, 'g-', 'LineWidth', 2);
 hold off;
-legend('Body travel', 'Road profile', 'LineWidth', 1, 'FontSize', 12);
+legend('Passive', 'MPC', 'Road profile', 'LineWidth', 1, 'FontSize', 12);
 ylabel('x_b (m)', 'FontSize', 12);
 xlabel('Time (s)', 'FontSize', 12);
 title('Body travel', 'FontSize', 12);
 %grid on;
 
-% Top-right: Body acceleration
+% Top-right: Body acceleration (MPC vs passive open-loop)
 ax2 = subplot(2,2,2);
-plot(t, y(:,2), 'b-', 'LineWidth', 2);
+plot(t,    y(:,3),    'r-', 'LineWidth', 2);
+hold on;
+plot(t_ol, y_ol(:,3), 'b-', 'LineWidth', 2);
+hold off;
+legend('MPC', 'Passive (fs = 0)', 'LineWidth', 1, 'FontSize', 12);
 ylabel('a_b (m/s^2)', 'FontSize', 12);
 xlabel('Time (s)', 'FontSize', 12);
 title('Body acceleration', 'FontSize', 12);
@@ -93,7 +105,11 @@ title('Body acceleration', 'FontSize', 12);
 
 % Bottom-left: Suspension deflection
 ax3 = subplot(2,2,3);
-plot(t, y(:,1), 'b-', 'LineWidth', 2);
+plot(t, y(:,2), 'r-', 'LineWidth', 2);
+hold on;
+plot(t_ol, y_ol(:,2), 'b-', 'LineWidth', 2);
+hold off;
+legend('MPC', 'Passive (fs = 0)', 'LineWidth', 1, 'FontSize', 12);
 ylabel('s_d (m)', 'FontSize', 12);
 xlabel('Time (s)', 'FontSize', 12);
 title('Suspension deflection', 'FontSize', 12);
@@ -101,8 +117,11 @@ title('Suspension deflection', 'FontSize', 12);
 
 % Bottom-right: Control force (command vs. filtered actuator force)
 ax4 = subplot(2,2,4);
-plot(t, u,         'b-', 'LineWidth', 2);
-% legend('Command', 'LineWidth', 1, 'FontSize', 12);
+plot(t, u,         'r-', 'LineWidth', 2);
+hold on;
+plot(t_ol, u_ol(:,2), 'b-', 'LineWidth', 2);
+hold off;
+legend('MPC', 'Passive (fs = 0)', 'LineWidth', 1, 'FontSize', 12);
 ylabel('fs (kN)', 'FontSize', 12);
 xlabel('Time (s)', 'FontSize', 12);
 title('Control force', 'FontSize', 12);
