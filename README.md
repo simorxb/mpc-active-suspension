@@ -48,7 +48,7 @@ Where:
 The MATLAB MPC Toolbox does not allow direct feedthrough from the manipulated variable to any output. To handle this, the actuator is modelled as a first-order lag
 
 $$
-f_{s,\text{act}} = \frac{1}{\tau s + 1}\, f_{s,\text{cmd}}
+f_{s,\text{act}} = \frac{1}{\tau s + 1}~ f_s
 $$
 
 with $\tau$ small enough to leave closed-loop performance essentially unchanged. The actuator state is appended to the plant, giving the augmented state vector
@@ -57,7 +57,7 @@ $$
 x = \begin{bmatrix} x_b & \dot{x}_b & x_w & \dot{x}_w & f_{s,\text{act}} \end{bmatrix}^T
 $$
 
-with inputs $u = [\,r,\; f_{s,\text{cmd}}\,]^T$ and outputs
+with inputs $u = [r,~ f_s]^T$ and outputs
 
 $$
 y = \begin{bmatrix} x_b \\\\ s_d \\\\ a_b \end{bmatrix} = \begin{bmatrix} x_b \\\\ x_b - x_w \\\\ \ddot{x}_b \end{bmatrix}
@@ -95,7 +95,7 @@ The controller is designed to:
 - **MV bounds**: $f_s \in [-5, +5]$ kN
 - **MV scale factor**: 2 (kN)
 - **Output scale factors**: 0.05 m for $x_b$, 0.05 m for $s_d$, 1 m/s² for $a_b$
-- **Output weights**: $[0,\; 3,\; 5]$ on $[x_b,\; s_d,\; a_b]$
+- **Output weights**: $[0, 3, 5]$ on $[x_b, s_d, a_b]$
 - **MV rate weight**: 0.1
 
 The output weights deliberately leave $x_b$ unweighted: the controller is asked to follow the road in body travel only as much as is needed to keep deflection and acceleration small, rather than trying to hold the body at an absolute reference.
@@ -104,7 +104,7 @@ The output weights deliberately leave $x_b$ unweighted: the controller is asked 
 The closed-loop is simulated for 3 s with a smooth half-cosine road bump as the unmeasured disturbance:
 
 $$
-r(t) = 0.025\,(1 - \cos(8\pi t)) \quad \text{for } 0 \le t \le 0.25\ \text{s}, \qquad r(t) = 0 \text{ otherwise}
+r(t) = 0.025~(1 - \cos(8\pi t)) \quad \text{for } 0 \le t \le 0.25\ \text{s}, \qquad r(t) = 0 \text{ otherwise}
 $$
 
 This produces a 0.05 m peak-to-peak bump entering the wheel through the tyre stiffness. The reference for all three outputs is held at zero. The same road profile is then applied to the open-loop plant with $f_s = 0$ to obtain the passive-suspension baseline used for comparison.
