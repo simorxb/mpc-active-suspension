@@ -1,11 +1,9 @@
 """Quarter-car active suspension schematic, drawn with Manim.
 
-Mirrors the MATLAB diagram appended at the end of ``design_mpc.m``: the body
-mass ``m_b`` and wheel mass ``m_w`` connected by the passive spring ``k_s``
+The body mass ``m_b`` and wheel mass ``m_w`` connected by the passive spring ``k_s``
 and damper ``b_s`` in parallel with the active force actuator ``f_s``,
 sitting on the tyre spring ``k_t`` and the road profile ``r``. A stylised
-car silhouette is drawn behind the schematic to give it context, in the
-spirit of the second reference image.
+car silhouette is drawn behind the schematic to give it context.
 
 Render a single PNG with::
 
@@ -160,16 +158,12 @@ def make_car_silhouette(xc: float, mb_y_top: float,
                         mw_yc: float) -> VGroup:
     """Stylised side-profile car body, in pale blue, drawn behind the schematic."""
     pts = [
-        np.array([xc - 3.4, mb_y_top + 0.05, 0.0]),
-        np.array([xc - 2.7, mb_y_top + 0.05, 0.0]),
-        np.array([xc - 1.6, mb_y_top + 0.95, 0.0]),
-        np.array([xc - 0.3, mb_y_top + 1.50, 0.0]),
-        np.array([xc + 1.6, mb_y_top + 1.50, 0.0]),
-        np.array([xc + 2.4, mb_y_top + 1.00, 0.0]),
-        np.array([xc + 3.0, mb_y_top + 0.30, 0.0]),
-        np.array([xc + 3.4, mb_y_top + 0.05, 0.0]),
-        np.array([xc + 3.4, mw_yc - 0.30, 0.0]),
-        np.array([xc - 3.4, mw_yc - 0.30, 0.0]),
+        np.array([xc - 3, mb_y_top + 1.5, 0.0]),
+        np.array([xc + 2, mb_y_top + 1.5, 0.0]),
+        np.array([xc + 4, mb_y_top + 0.7, 0.0]),
+        np.array([xc + 4.5, mb_y_top + 0.6, 0.0]),
+        np.array([xc + 4.5, mw_yc - 0.2, 0.0]),
+        np.array([xc - 3, mw_yc - 0.2, 0.0]),
     ]
     body = Polygon(
         *pts,
@@ -179,29 +173,18 @@ def make_car_silhouette(xc: float, mb_y_top: float,
         fill_opacity=0.12,
     )
 
-    # window glass hint (top edge + B-pillar)
-    win_top = Line(
-        np.array([xc - 1.4, mb_y_top + 1.40, 0.0]),
-        np.array([xc + 1.4, mb_y_top + 1.40, 0.0]),
-        color=CAR_BLUE, stroke_width=2,
-    )
-    win_div = Line(
-        np.array([xc - 0.05, mb_y_top + 0.95, 0.0]),
-        np.array([xc - 0.05, mb_y_top + 1.45, 0.0]),
-        color=CAR_BLUE, stroke_width=2,
-    )
-
     # wheel arch (upper half) + dashed tyre hint
     arch = Arc(
-        radius=1.30, start_angle=0.0, angle=PI,
+        radius=1.9, start_angle=0.0, angle=PI,
         arc_center=np.array([xc, mw_yc, 0.0]),
         color=CAR_BLUE, stroke_width=2.5,
     )
-    tyre_circle = Circle(radius=1.05, color=CAR_BLUE, stroke_width=2)
+    tyre_circle = Circle(radius=2, color=CAR_BLUE, stroke_width=5)
     tyre_circle.move_to(np.array([xc, mw_yc, 0.0]))
     tyre = DashedVMobject(tyre_circle, num_dashes=32)
 
-    return VGroup(body, win_top, win_div, arch, tyre)
+    # No car silhouette for now
+    return VGroup(tyre)
 
 
 # --- Scene -----------------------------------------------------------------
@@ -215,7 +198,7 @@ class QuarterCarSuspension(Scene):
         xc = 0.0
         mb_w, mb_h = 4.0, 0.7
         mw_w, mw_h = 4.0, 0.55
-        mb_y_bot = 1.0                         # bottom of body mass
+        mb_y_bot = 1.7                         # bottom of body mass
         mw_y_top = -0.7                        # top of wheel mass
         mw_y_bot = mw_y_top - mw_h
         road_y = -3.0
