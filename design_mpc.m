@@ -89,6 +89,20 @@ fs_actual = xp(:,5);
 u_ol      = [r_signal, zeros(steps,1)];
 [y_ol, t_ol, x_ol] = lsim(qcar, u_ol, (0:steps-1)'*Ts);
 
+%% Export trace for the Manim animation
+% Written next to this script. Picked up by quarter_car_diagram.py
+% (Scene: QuarterCarSuspensionAnimation). Columns must be t, x_b, x_w, r
+% in SI units (seconds, metres).
+trace_mpc = table(t, xp(:,1), xp(:,3), r_signal, ...
+    'VariableNames', {'t', 'x_b', 'x_w', 'r'});
+writetable(trace_mpc, 'simulation.csv');
+
+% Same scenario with the passive baseline (fs = 0); uncomment to render
+% the passive animation instead of the MPC one.
+% trace_passive = table(t_ol, x_ol(:,1), x_ol(:,3), r_signal, ...
+%     'VariableNames', {'t', 'x_b', 'x_w', 'r'});
+% writetable(trace_passive, 'simulation_passive.csv');
+
 %% Plot
 figure;
 

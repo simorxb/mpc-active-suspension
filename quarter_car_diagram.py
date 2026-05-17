@@ -5,17 +5,35 @@ and damper ``b_s`` in parallel with the active force actuator ``f_s``,
 sitting on the tyre spring ``k_t`` and the road profile ``r``. A stylised
 car silhouette is drawn behind the schematic to give it context.
 
-Render a single PNG with::
+Two scenes are provided:
 
-    pip install manim
-    manim -sqh quarter_car_diagram.py QuarterCarSuspension
+* ``QuarterCarSuspension`` — the static schematic, rendered as a single PNG::
 
-The ``-s`` flag tells Manim to save just the last frame as an image instead
-of rendering a video. Drop ``-q h`` (or use ``-ql``) for a faster, lower
-resolution image while iterating.
+      pip install manim
+      manim -sqh quarter_car_diagram.py QuarterCarSuspension
+
+  The ``-s`` flag tells Manim to save just the last frame as an image
+  instead of rendering a video. Drop ``-q h`` (or use ``-ql``) for a
+  faster, lower-resolution image while iterating.
+
+* ``QuarterCarSuspensionAnimation`` — the same schematic, animated from a
+  simulation trace of ``(t, x_b, x_w, r)`` exported from the MATLAB /
+  Simulink model. Render to MP4 with::
+
+      manim -qh quarter_car_diagram.py QuarterCarSuspensionAnimation
+
+  The default trace path is ``simulation.csv`` next to this script. Export
+  it from MATLAB after running ``design_mpc`` with, e.g.::
+
+      writematrix([t, xp(:,1), xp(:,3), r_signal], 'simulation.csv')
+
+  (columns: time [s], body travel [m], wheel travel [m], road profile [m]).
 """
 
 from __future__ import annotations
+
+from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 from manim import (
@@ -24,6 +42,8 @@ from manim import (
     BLACK,
     Circle,
     DashedVMobject,
+    DecimalNumber,
+    LEFT,
     Line,
     MathTex,
     PI,
@@ -33,13 +53,22 @@ from manim import (
     Scene,
     Text,
     UP,
+    UR,
+    ValueTracker,
     VGroup,
     VMobject,
     WHITE,
+    always_redraw,
+    linear,
 )
 
 
 CAR_BLUE = "#3D7FE6"
+
+DEFAULT_DATA_PATH = "simulation.csv"
+# Real-world body/wheel/road motion is centimetre-scale, so we amplify it
+# before feeding it into the schematic to keep the animation legible.
+DEFAULT_DISPLAY_SCALE = 20.0
 
 
 # --- Symbol builders -------------------------------------------------------
@@ -187,25 +216,74 @@ def make_car_silhouette(xc: float, mb_y_top: float,
     return VGroup(tyre)
 
 
-# --- Scene -----------------------------------------------------------------
+# --- Shared layout & simulation IO ----------------------------------------
+
+
+def _layout() -> SimpleNamespace:
+    """Layout constants (Manim units; frame is ~14.22 x 8).
+
+    Shared between the static and animated scenes so both stay in sync.
+    """
+    L = SimpleNamespace()
+    L.xc = 0.0
+    L.mb_w, L.mb_h = 4.0, 0.7                  # body rectangle
+    L.mw_w, L.mw_h = 4.0, 0.55                 # wheel rectangle
+    L.mb_y_bot = 1.7                           # bottom of body mass
+    L.mw_y_top = -0.7                          # top of wheel mass
+    L.mw_y_bot = L.mw_y_top - L.mw_h
+    L.road_y = -3.0
+    L.spring_x = L.xc - L.mb_w / 2.0 + 0.55
+    L.damp_x = L.xc
+    L.act_x = L.xc + L.mb_w / 2.0 - 0.55
+    return L
+
+
+def _load_signal_csv(path: str):
+    """Load a CSV of ``(t, x_b, x_w, r)`` in SI units (seconds, metres).
+
+    The first row may be a header (e.g. ``t,x_b,x_w,r``) or numeric data.
+    Returns four 1-D ``numpy`` arrays of the same length.
+    """
+    p = Path(path)
+    if not p.is_absolute():
+        p = Path(__file__).parent / p
+    if not p.is_file():
+        raise FileNotFoundError(
+            f"Simulation trace not found at {p}. Export it from MATLAB after "
+            "running design_mpc with, e.g.: "
+            "writematrix([t, xp(:,1), xp(:,3), r_signal], 'simulation.csv')"
+        )
+    try:
+        data = np.loadtxt(str(p), delimiter=",")
+    except ValueError:
+        # First row is a header.
+        data = np.loadtxt(str(p), delimiter=",", skiprows=1)
+    if data.ndim != 2 or data.shape[1] < 4:
+        raise ValueError(
+            f"Expected a 2-D CSV with at least 4 columns (t, x_b, x_w, r); "
+            f"got shape {data.shape}."
+        )
+    return data[:, 0], data[:, 1], data[:, 2], data[:, 3]
+
+
+# --- Scenes ----------------------------------------------------------------
 
 
 class QuarterCarSuspension(Scene):
     """Static schematic of the quarter-car active-suspension model."""
 
     def construct(self):
-        # Layout (Manim units; frame is ~14.22 x 8)
-        xc = 0.0
-        mb_w, mb_h = 4.0, 0.7
-        mw_w, mw_h = 4.0, 0.55
-        mb_y_bot = 1.7                         # bottom of body mass
-        mw_y_top = -0.7                        # top of wheel mass
-        mw_y_bot = mw_y_top - mw_h
-        road_y = -3.0
-
-        spring_x = xc - mb_w / 2.0 + 0.55
-        damp_x = xc
-        act_x = xc + mb_w / 2.0 - 0.55
+        L = _layout()
+        xc = L.xc
+        mb_w, mb_h = L.mb_w, L.mb_h
+        mw_w, mw_h = L.mw_w, L.mw_h
+        mb_y_bot = L.mb_y_bot
+        mw_y_top = L.mw_y_top
+        mw_y_bot = L.mw_y_bot
+        road_y = L.road_y
+        spring_x = L.spring_x
+        damp_x = L.damp_x
+        act_x = L.act_x
 
         # Body & wheel rectangles (opaque so they sit cleanly on the silhouette)
         body_rect = Rectangle(
@@ -305,4 +383,162 @@ class QuarterCarSuspension(Scene):
             ks_label, bs_label, fs_label,
             kt_label,
             xb_label, xw_label, r_label,
+        )
+
+
+class QuarterCarSuspensionAnimation(Scene):
+    """Animated quarter-car driven by a simulation trace.
+
+    Reads a CSV with columns ``(t, x_b, x_w, r)`` in SI units and animates
+    the body mass, wheel mass, road surface, springs, damper and actuator
+    in real time. The static schematic class above is left untouched, so the
+    same script renders either a still PNG or an MP4 depending on which
+    Scene is selected on the command line.
+
+    Override via subclassing (or by editing the class attributes) to point
+    at a different CSV or change the amplification factor::
+
+        manim -qh quarter_car_diagram.py QuarterCarSuspensionAnimation
+    """
+
+    # Path to a CSV with columns (t [s], x_b [m], x_w [m], r [m]).
+    # Relative paths are resolved next to this script.
+    DATA_PATH: str = DEFAULT_DATA_PATH
+
+    # Visual amplification of the (cm-scale) physical displacements.
+    DISPLAY_SCALE: float = DEFAULT_DISPLAY_SCALE
+
+    # Playback speed: 1.0 = real time, 0.5 = half-speed (slow-mo), etc.
+    PLAYBACK_SPEED: float = 1.0
+
+    def construct(self):
+        L = _layout()
+        t_data, xb_data, xw_data, r_data = _load_signal_csv(self.DATA_PATH)
+        s = float(self.DISPLAY_SCALE)
+        T = float(t_data[-1])
+
+        # Baseline (zero-displacement) positions
+        body_y_c0 = L.mb_y_bot + L.mb_h / 2.0
+        wheel_y_c0 = L.mw_y_top - L.mw_h / 2.0
+
+        # ValueTracker holds the current simulation time; updaters read from it
+        time_tracker = ValueTracker(0.0)
+
+        def get_xb() -> float:
+            return float(np.interp(time_tracker.get_value(), t_data, xb_data)) * s
+
+        def get_xw() -> float:
+            return float(np.interp(time_tracker.get_value(), t_data, xw_data)) * s
+
+        def get_r() -> float:
+            return float(np.interp(time_tracker.get_value(), t_data, r_data)) * s
+
+        # --- Bodies that translate vertically ---
+        body_rect = Rectangle(
+            width=L.mb_w, height=L.mb_h,
+            color=WHITE, stroke_width=3,
+            fill_color=BLACK, fill_opacity=1.0,
+        ).move_to(np.array([L.xc, body_y_c0, 0.0]))
+        body_rect.add_updater(
+            lambda m: m.move_to(np.array([L.xc, body_y_c0 + get_xb(), 0.0]))
+        )
+
+        mb_label = MathTex("m_b").scale(1.0).move_to(body_rect)
+        mb_label.add_updater(lambda m: m.move_to(body_rect))
+
+        wheel_rect = Rectangle(
+            width=L.mw_w, height=L.mw_h,
+            color=WHITE, stroke_width=3,
+            fill_color=BLACK, fill_opacity=1.0,
+        ).move_to(np.array([L.xc, wheel_y_c0, 0.0]))
+        wheel_rect.add_updater(
+            lambda m: m.move_to(np.array([L.xc, wheel_y_c0 + get_xw(), 0.0]))
+        )
+
+        mw_label = MathTex("m_w").scale(1.0).move_to(wheel_rect)
+        mw_label.add_updater(lambda m: m.move_to(wheel_rect))
+
+        # Tyre silhouette: dashed circle that rides with the wheel
+        tyre_circle = Circle(radius=2, color=CAR_BLUE, stroke_width=5)
+        tyre_circle.move_to(np.array([L.xc, wheel_y_c0, 0.0]))
+        tyre = DashedVMobject(tyre_circle, num_dashes=32)
+        tyre.add_updater(
+            lambda m: m.move_to(np.array([L.xc, wheel_y_c0 + get_xw(), 0.0]))
+        )
+
+        # --- Springs / damper / actuator are rebuilt every frame because
+        # their internal geometry (zig-zag corners, piston lines) depends on
+        # the live endpoints rather than a simple affine transform.
+        spring_ks = always_redraw(lambda: make_spring(
+            [L.spring_x, L.mw_y_top + get_xw(), 0.0],
+            [L.spring_x, L.mb_y_bot + get_xb(), 0.0],
+            n_coils=8, width=0.20,
+        ))
+        damper_bs = always_redraw(lambda: make_damper(
+            [L.damp_x, L.mw_y_top + get_xw(), 0.0],
+            [L.damp_x, L.mb_y_bot + get_xb(), 0.0],
+            width=0.18,
+        ))
+        actuator_fs = always_redraw(lambda: make_actuator(
+            [L.act_x, L.mw_y_top + get_xw(), 0.0],
+            [L.act_x, L.mb_y_bot + get_xb(), 0.0],
+            r=0.25,
+        ))
+        spring_kt = always_redraw(lambda: make_spring(
+            [L.xc, L.road_y + get_r(), 0.0],
+            [L.xc, L.mw_y_bot + get_xw(), 0.0],
+            n_coils=6, width=0.20,
+        ))
+
+        # Road (rebuilt every frame so the hatching stays attached to the line)
+        road = always_redraw(lambda: make_road(
+            L.xc, L.road_y + get_r(),
+            width=5.5, n_hatches=15,
+        ))
+
+        # Labels next to the live elements
+        ks_label = MathTex("k_s").scale(0.9)
+        ks_label.add_updater(lambda m: m.next_to(spring_ks, RIGHT, buff=0.1))
+        bs_label = MathTex("b_s").scale(0.9)
+        bs_label.add_updater(lambda m: m.next_to(damper_bs, RIGHT, buff=0.1))
+        fs_label = MathTex("f_s").scale(0.9)
+        fs_label.add_updater(lambda m: m.next_to(actuator_fs, RIGHT, buff=0.1))
+        kt_label = MathTex("k_t").scale(0.9)
+        kt_label.add_updater(lambda m: m.next_to(spring_kt, RIGHT, buff=0.15))
+
+        # Title and an HUD showing the current simulation time.
+        title = Text(
+            "Quarter-car active suspension - simulation",
+            font_size=28,
+        ).to_edge(UP, buff=0.25)
+
+        time_caption = MathTex("t = ", font_size=32)
+        time_unit = MathTex(r"\,\mathrm{s}", font_size=32)
+        time_value = DecimalNumber(0.0, num_decimal_places=2, font_size=32)
+        time_value.add_updater(lambda m: m.set_value(time_tracker.get_value()))
+        time_hud = VGroup(time_caption, time_value, time_unit).arrange(
+            RIGHT, buff=0.08
+        ).to_corner(UR, buff=0.3)
+
+        # Z-stack: tyre first, then road, then schematic on top.
+        self.add(
+            title,
+            tyre,
+            road,
+            body_rect, wheel_rect,
+            spring_ks, damper_bs, actuator_fs,
+            spring_kt,
+            mb_label, mw_label,
+            ks_label, bs_label, fs_label, kt_label,
+            time_hud,
+        )
+
+        # Play the trace. Manim integrates the ValueTracker linearly over
+        # run_time, so the on-screen time matches the simulation time
+        # (scaled by PLAYBACK_SPEED).
+        run_time = max(T / float(self.PLAYBACK_SPEED), 1e-3)
+        self.play(
+            time_tracker.animate.set_value(T),
+            run_time=run_time,
+            rate_func=linear,
         )
