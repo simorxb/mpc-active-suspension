@@ -3,7 +3,7 @@
 [![Open in MATLAB Online](https://www.mathworks.com/images/responsive/global/open-in-matlab-online.svg)](https://matlab.mathworks.com/open/github/v1?repo=simorxb/mpc-active-suspension)
 
 ## Summary
-This project implements a Model Predictive Controller (MPC) for an active automotive suspension, modelled as a quarter-car system. The plant is described as a linear state-space model that augments the classical two-mass quarter-car with a fast first-order actuator lag, and the controller is designed and simulated in MATLAB using the Model Predictive Control Toolbox. A Manim Python script is also provided to generate the schematic of the system.
+This project implements a Model Predictive Controller (MPC) for an active automotive suspension, modelled as a quarter-car system. The plant is described as a linear state-space model that augments the classical two-mass quarter-car with a fast first-order actuator lag, and the controller is designed and simulated in MATLAB using the Model Predictive Control Toolbox. A Manim Python script is also provided to generate both the static schematic of the system and animated videos of the simulated body, wheel and road motion for the MPC and passive runs.
 
 ## Project Overview
 Active suspension systems use a controllable force in parallel with the passive spring/damper to reject road disturbances and improve ride comfort and handling. The control challenge is to attenuate vertical body acceleration and limit suspension deflection while respecting the actuator's force budget, all in the presence of an unmeasured road profile.
@@ -17,7 +17,7 @@ The closed-loop response is then compared against the passive baseline ($f_s = 0
 - **Augmented state-space plant** including a first-order actuator lag to remove direct feedthrough from the MV.
 - **Road profile as unmeasured disturbance**, with a smooth half-cosine bump used as the test scenario.
 - **Comparison with the passive suspension** ($f_s = 0$) on the same input for a fair benchmark.
-- **Schematic of the system** generated programmatically with Manim (`quarter_car_diagram.py`).
+- **Schematic and simulation animations** generated programmatically with Manim (`quarter_car_diagram.py`), with the animated scenes driven directly by the simulation traces exported from MATLAB.
 
 ## Quarter-Car Modelling
 
@@ -104,19 +104,24 @@ The output weights deliberately leave $x_b$ unweighted: the controller is asked 
 The closed-loop is simulated for 3 s with a smooth half-cosine road bump as the unmeasured disturbance:
 
 $$
-r(t) = 0.025~(1 - \cos(8\pi t)) \quad \text{for } 0 \le t \le 0.25\ \text{s}, \qquad r(t) = 0 \text{ otherwise}
+r(t) = 0.1~(1 - \cos(8\pi t)) \quad \text{for } 0 \le t \le 0.25\ \text{s}, \qquad r(t) = 0 \text{ otherwise}
 $$
 
-This produces a 0.05 m peak-to-peak bump entering the wheel through the tyre stiffness. The reference for all three outputs is held at zero. The same road profile is then applied to the open-loop plant with $f_s = 0$ to obtain the passive-suspension baseline used for comparison.
+This produces a 0.2 m peak-to-peak bump entering the wheel through the tyre stiffness. The reference for all three outputs is held at zero. The same road profile is then applied to the open-loop plant with $f_s = 0$ to obtain the passive-suspension baseline used for comparison.
 
 ## Files
 - **`init.m`** — Defines the physical parameters of the quarter-car ($m_b$, $m_w$, $k_s$, $b_s$, $k_t$).
-- **`design_mpc.m`** — Builds the augmented state-space model, configures the MPC object, runs the closed-loop simulation against a road bump, simulates the passive baseline, and plots body travel, body acceleration, suspension deflection and control force.
-- **`quarter_car_diagram.py`** — Manim script that renders the schematic of the quarter-car active-suspension model used in the project documentation.
+- **`design_mpc.m`** — Builds the augmented state-space model, configures the MPC object, runs the closed-loop simulation against a road bump, simulates the passive baseline, plots body travel/body acceleration/suspension deflection/control force, and exports the MPC and passive traces to `simulation_mpc.csv` and `simulation_open_loop.csv` for the animation script.
+- **`quarter_car_diagram.py`** — Manim script that renders the still schematic of the quarter-car (Scene: `QuarterCarSuspension`) and animates the body, wheel, road, springs and damper from a simulation trace (Scenes: `QuarterCarSuspensionAnimationMPC` and `QuarterCarSuspensionAnimationOpenLoop`).
+- **`simulation_mpc.csv`**, **`simulation_open_loop.csv`** — Simulation traces written by `design_mpc.m`; each has columns `t, x_b, x_w, r` in SI units and is consumed by the corresponding animation scene.
 
 ### Typical run
 1. Run `init` to load the plant parameters into the workspace.
-2. Run `design_mpc` to build the controller, simulate the closed loop and the passive baseline, and plot the comparison.
+2. Run `design_mpc` to build the controller, simulate the closed loop and the passive baseline, plot the comparison, and write `simulation_mpc.csv` and `simulation_open_loop.csv` next to the script.
+3. (Optional) Render the schematic and animations with Manim:
+    - `manim -sqh quarter_car_diagram.py QuarterCarSuspension` — still schematic.
+    - `manim -qh quarter_car_diagram.py QuarterCarSuspensionAnimationMPC` — closed-loop MPC video.
+    - `manim -qh quarter_car_diagram.py QuarterCarSuspensionAnimationOpenLoop` — passive baseline video.
 
 ## Author
 This project is developed by Simone Bertoni. Learn more about my work on my personal website - [Simone Bertoni - Control Lab](https://simonebertonilab.com/).
