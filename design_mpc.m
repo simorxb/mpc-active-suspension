@@ -68,11 +68,11 @@ steps = round(Tsim/Ts);
 % Reference (we want xb = 0, sd = 0 and ab = 0)
 ref      = zeros(steps, 3);
 
-% Road profile: smooth half-cosine bump (1 - cos) of amplitude 0.05 m
+% Road profile: smooth half-cosine bump (1 - cos) of amplitude 0.2 m
 r_signal = zeros(steps, 1);
 N_bump   = round(0.25/Ts);
 t_bump   = (0:N_bump-1)'*Ts;
-r_signal(1:N_bump) = 0.025*(1-cos(8*pi*t_bump));
+r_signal(1:N_bump) = 0.1*(1-cos(8*pi*t_bump));
 
 % Simulation options
 simopt = mpcsimopt(mpcobj);
@@ -95,13 +95,11 @@ u_ol      = [r_signal, zeros(steps,1)];
 % in SI units (seconds, metres).
 trace_mpc = table(t, xp(:,1), xp(:,3), r_signal, ...
     'VariableNames', {'t', 'x_b', 'x_w', 'r'});
-writetable(trace_mpc, 'simulation.csv');
+writetable(trace_mpc, 'simulation_mpc.csv');
 
-% Same scenario with the passive baseline (fs = 0); uncomment to render
-% the passive animation instead of the MPC one.
-% trace_passive = table(t_ol, x_ol(:,1), x_ol(:,3), r_signal, ...
-%     'VariableNames', {'t', 'x_b', 'x_w', 'r'});
-% writetable(trace_passive, 'simulation_passive.csv');
+trace_open_loop = table(t_ol, x_ol(:,1), x_ol(:,3), r_signal, ...
+    'VariableNames', {'t', 'x_b', 'x_w', 'r'});
+writetable(trace_open_loop, 'simulation_open_loop.csv');
 
 %% Plot
 figure;

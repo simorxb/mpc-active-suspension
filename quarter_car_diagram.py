@@ -5,7 +5,7 @@ and damper ``b_s`` in parallel with the active force actuator ``f_s``,
 sitting on the tyre spring ``k_t`` and the road profile ``r``. A stylised
 car silhouette is drawn behind the schematic to give it context.
 
-Two scenes are provided:
+Available scenes:
 
 * ``QuarterCarSuspension`` — the static schematic, rendered as a single PNG::
 
@@ -16,22 +16,30 @@ Two scenes are provided:
   instead of rendering a video. Drop ``-q h`` (or use ``-ql``) for a
   faster, lower-resolution image while iterating.
 
-* ``QuarterCarSuspensionAnimation`` — the same schematic, animated from a
-  simulation trace of ``(t, x_b, x_w, r)`` exported from the MATLAB /
-  Simulink model. Render to MP4 with::
+* ``QuarterCarSuspensionAnimationMPC`` — the schematic animated from the
+  closed-loop MPC trace (``simulation_mpc.csv``)::
 
+      manim -qh quarter_car_diagram.py QuarterCarSuspensionAnimationMPC
+
+* ``QuarterCarSuspensionAnimationOpenLoop`` — same scene driven by the
+  passive (``fs = 0``) baseline trace (``simulation_open_loop.csv``)::
+
+      manim -qh quarter_car_diagram.py QuarterCarSuspensionAnimationOpenLoop
+
+* ``QuarterCarSuspensionAnimation`` — generic animated scene. By default
+  it reads ``simulation_mpc.csv``; override the CSV with the
+  ``QCAR_TRACE`` environment variable, e.g. in PowerShell::
+
+      $env:QCAR_TRACE = "my_run.csv"
       manim -qh quarter_car_diagram.py QuarterCarSuspensionAnimation
 
-  The default trace path is ``simulation.csv`` next to this script. Export
-  it from MATLAB after running ``design_mpc`` with, e.g.::
-
-      writematrix([t, xp(:,1), xp(:,3), r_signal], 'simulation.csv')
-
-  (columns: time [s], body travel [m], wheel travel [m], road profile [m]).
+  Both CSVs are produced by ``design_mpc.m`` and must have columns
+  ``t, x_b, x_w, r`` in SI units (seconds, metres).
 """
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -65,10 +73,17 @@ from manim import (
 
 CAR_BLUE = "#3D7FE6"
 
-DEFAULT_DATA_PATH = "simulation.csv"
+# Default trace consumed by ``QuarterCarSuspensionAnimation``. The dedicated
+# subclasses below pin specific files; for one-off CSVs you can also set the
+# ``QCAR_TRACE`` environment variable instead of editing this constant.
+DEFAULT_DATA_PATH = "simulation_mpc.csv"
+DATA_PATH_ENV_VAR = "QCAR_TRACE"
+
 # Real-world body/wheel/road motion is centimetre-scale, so we amplify it
 # before feeding it into the schematic to keep the animation legible.
-DEFAULT_DISPLAY_SCALE = 20.0
+# The tyre radius in reality is is 0.3 m and in the schematic is 2, so we
+# amplify by 2/0.3.
+DEFAULT_DISPLAY_SCALE = 2/0.3
 
 
 # --- Symbol builders -------------------------------------------------------
@@ -401,9 +416,14 @@ class QuarterCarSuspensionAnimation(Scene):
         manim -qh quarter_car_diagram.py QuarterCarSuspensionAnimation
     """
 
-    # Path to a CSV with columns (t [s], x_b [m], x_w [m], r [m]).
-    # Relative paths are resolved next to this script.
-    DATA_PATH: str = DEFAULT_DATA_PATH
+    # Path to a CSV with columns (t [s], x_b [m], x_w [m], r [m]). Relative
+    # paths are resolved next to this script. The ``QCAR_TRACE`` environment
+    # variable takes precedence when set, so the file can be switched at the
+    # command line without editing the source.
+    DATA_PATH: str = os.environ.get(DATA_PATH_ENV_VAR, DEFAULT_DATA_PATH)
+
+    # Title shown at the top of the frame. Override per subclass.
+    TITLE: str = "Quarter-car active suspension - simulation"
 
     # Visual amplification of the (cm-scale) physical displacements.
     DISPLAY_SCALE: float = DEFAULT_DISPLAY_SCALE
@@ -508,7 +528,7 @@ class QuarterCarSuspensionAnimation(Scene):
 
         # Title and an HUD showing the current simulation time.
         title = Text(
-            "Quarter-car active suspension - simulation",
+            self.TITLE,
             font_size=28,
         ).to_edge(UP, buff=0.25)
 
@@ -542,3 +562,17 @@ class QuarterCarSuspensionAnimation(Scene):
             run_time=run_time,
             rate_func=linear,
         )
+
+
+class QuarterCarSuspensionAnimationMPC(QuarterCarSuspensionAnimation):
+    """Animation driven by the closed-loop MPC trace from ``design_mpc.m``."""
+
+    DATA_PATH: str = "simulation_mpc.csv"
+    TITLE: str = "Quarter-car active suspension - MPC"
+
+
+class QuarterCarSuspensionAnimationOpenLoop(QuarterCarSuspensionAnimation):
+    """Animation driven by the passive (``fs = 0``) open-loop baseline trace."""
+
+    DATA_PATH: str = "simulation_open_loop.csv"
+    TITLE: str = "Quarter-car active suspension - Open Loop"
